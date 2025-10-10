@@ -28,3 +28,5 @@ export default async function handler(req, res) {
     res.status(500).json({ response: "Internal server error" });
   }
 }
+console.log("Using key:", process.env.OPENAI_API_KEY ? "✅ Loaded" : "❌ Missing");
+
