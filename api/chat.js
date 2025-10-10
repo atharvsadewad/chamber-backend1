@@ -1,32 +1,57 @@
+// A more flexible CORS setup for Vercel
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "https://chamber-frontend-i2lc.vercel.app/");
+  // List of allowed domains
+  const allowedOrigins = [
+    'https://chamber-frontend-i2lc.vercel.app',
+    // Vercel preview URLs end with .vercel.app
+    // This regex allows any of them.
+  ];
+  const origin = req.headers.origin;
+
+  // Check if the request origin is in our list
+  if (allowedOrigins.some(allowedOrigin => origin && origin.startsWith(allowedOrigin.replace('https://', '')) || (origin && new RegExp(`^https://.*-lordmishu.vercel.app$`).test(origin)) )) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (process.env.NODE_ENV === 'development' && origin && origin.startsWith('http://localhost')) {
+      // Allow localhost in development
+      res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
+
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  // ... rest of your code
   if (req.method !== "POST") return res.status(405).json({ message: "Only POST requests allowed" });
 
-  const { message } = req.body;
+  const { message } = req.body;
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: message }]
-      })
-    });
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: message }]
+      })
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        console.error("OpenAI API Error:", errorData);
+        throw new Error(`OpenAI API responded with status: ${response.status}`);
+    }
 
-    const data = await response.json();
-    res.status(200).json({ response: data.choices?.[0]?.message?.content });
-  } catch (error) {
-    console.error("Error in chat handler:", error);
-    res.status(500).json({ response: "Internal server error" });
-  }
+    const data = await response.json();
+    res.status(200).json({ response: data.choices?.[0]?.message?.content });
+  } catch (error) {
+    console.error("Error in chat handler:", error);
+    res.status(500).json({ response: "Internal server error" });
+  }
 }
 console.log("Using key:", process.env.OPENAI_API_KEY ? "✅ Loaded" : "❌ Missing");
-
