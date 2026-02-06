@@ -1,15 +1,14 @@
-// ✅ Chamber AI Backend — Fixed CORS + OpenAI handler
+// ✅ Chamber AI Backend — GEMINI VERSION (FREE)
+
 export default async function handler(req, res) {
-  // ✅ Allowed frontend origins (add more if needed)
+
   const allowedOrigins = [
-    "https://chamber-frontend-i2lc.vercel.app", // your production frontend
-    "https://chamber-frontend.vercel.app",      // optional main domain
-    "http://localhost:3000"                     // for local testing
+    "https://chamber-frontend-i2lc.vercel.app",
+    "https://chamber-frontend.vercel.app",
+    "http://localhost:3000"
   ];
 
   const origin = req.headers.origin;
-
-  // ✅ Set CORS headers dynamically
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
@@ -17,12 +16,10 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // ✅ Handle preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // ✅ Reject non-POST requests
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Only POST requests allowed" });
   }
@@ -30,38 +27,49 @@ export default async function handler(req, res) {
   const { message } = req.body;
 
   try {
-    // ✅ Forward request to OpenAI
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "You are Chamber AI, a legal information assistant for Indian law." },
-          { role: "user", content: message }
-        ]
-      })
-    });
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("🔴 OpenAI API Error:", errorData);
-      return res.status(response.status).json({ response: "OpenAI API error occurred." });
+    if (!GEMINI_KEY) {
+      return res.status(500).json({
+        response: "Gemini API key missing in Vercel environment variables."
+      });
     }
 
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "No response from AI.";
-    console.log("✅ AI Response:", reply);
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `You are Chamber AI, an Indian legal assistant. 
+Answer clearly in simple language.
+
+User question: ${message}`
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await geminiResponse.json();
+
+    const reply =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "I could not generate a response.";
+
+    console.log("✅ Gemini Response:", reply);
 
     res.status(200).json({ response: reply });
+
   } catch (error) {
     console.error("💥 Backend Error:", error);
     res.status(500).json({ response: "Internal server error" });
   }
 }
-
-// ✅ For debugging environment
-console.log("🔑 OpenAI Key Loaded:", process.env.OPENAI_API_KEY ? "✅ YES" : "❌ NO");
