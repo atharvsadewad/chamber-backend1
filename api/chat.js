@@ -1,4 +1,4 @@
-// ✅ Chamber AI Backend — GEMINI VERSION (FREE)
+// ✅ Chamber AI Backend — GEMINI + SUPABASE (UPGRADED)
 
 export default async function handler(req, res) {
 
@@ -28,13 +28,43 @@ export default async function handler(req, res) {
 
   try {
     const GEMINI_KEY = process.env.GEMINI_API_KEY;
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
     if (!GEMINI_KEY) {
       return res.status(500).json({
-        response: "Gemini API key missing in Vercel environment variables."
+        response: "Gemini API key missing."
       });
     }
 
+    // 🔍 STEP 1: Fetch relevant laws from DB
+    let context = "";
+
+    try {
+      const lawRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/laws?select=*&or=(title.ilike.%${message}%,content.ilike.%${message}%)&limit=3`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`
+          }
+        }
+      );
+
+      const lawData = await lawRes.json();
+
+      if (lawData.length > 0) {
+        context = lawData.map(law => `
+Title: ${law.title}
+Content: ${law.content}
+`).join("\n\n");
+      }
+
+    } catch (err) {
+      console.error("⚠️ Supabase fetch error:", err);
+    }
+
+    // 🤖 STEP 2: Send to Gemini with context
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
@@ -46,10 +76,15 @@ export default async function handler(req, res) {
               role: "user",
               parts: [
                 {
-                  text: `You are Chamber AI, an Indian legal assistant. 
-Answer clearly in simple language.
+                  text: `You are Chamber AI, an Indian legal assistant.
 
-User question: ${message}`
+Use the following legal context to answer:
+
+${context || "No specific legal data found."}
+
+User question: ${message}
+
+Answer clearly in simple language. If context is not helpful, answer generally.`
                 }
               ]
             }
