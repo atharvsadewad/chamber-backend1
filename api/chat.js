@@ -1,4 +1,4 @@
-// ✅ Chamber AI Backend — GEMINI + SUPABASE (UPGRADED)
+// ✅ Chamber AI Backend — GEMINI + SUPABASE (FINAL FIXED)
 
 export default async function handler(req, res) {
 
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔍 STEP 1: Fetch relevant laws from DB
+    // 🔍 STEP 1: Fetch relevant laws
     let context = "";
 
     try {
@@ -64,7 +64,22 @@ Content: ${law.content}
       console.error("⚠️ Supabase fetch error:", err);
     }
 
-    // 🤖 STEP 2: Send to Gemini with context
+    // 🤖 STEP 2: Gemini prompt (FIXED)
+    const prompt = `You are Chamber AI, an Indian legal assistant.
+
+If user asks to generate a draft:
+- Format it properly
+- Use formal legal language
+- Structure it clearly
+
+Use the following legal context if available:
+
+${context || "No specific legal data found."}
+
+User request: ${message}
+
+Respond clearly in simple language.`;
+
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
@@ -75,17 +90,7 @@ Content: ${law.content}
             {
               role: "user",
               parts: [
-                {
-                  text: `You are Chamber AI, an Indian legal assistant.
-
-Use the following legal context to answer:
-
-${context || "No specific legal data found."}
-
-User question: ${message}
-
-Answer clearly in simple language. If context is not helpful, answer generally.`
-                }
+                { text: prompt }
               ]
             }
           ]
