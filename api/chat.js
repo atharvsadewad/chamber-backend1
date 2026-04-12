@@ -100,16 +100,20 @@ Respond clearly in simple language.`;
 
     const data = await geminiResponse.json();
 
-    const reply =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "I could not generate a response.";
+console.log("🧠 Gemini RAW:", JSON.stringify(data, null, 2));
 
-    console.log("✅ Gemini Response:", reply);
+if (data.error) {
+  console.error("❌ Gemini API Error:", data.error);
+  return res.status(500).json({
+    response: "Gemini error: " + data.error.message
+  });
+}
 
-    res.status(200).json({ response: reply });
+const reply =
+  data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  } catch (error) {
-    console.error("💥 Backend Error:", error);
-    res.status(500).json({ response: "Internal server error" });
-  }
+if (!reply) {
+  return res.status(500).json({
+    response: "No response from AI (check logs)"
+  });
 }
