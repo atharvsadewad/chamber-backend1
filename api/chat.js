@@ -102,8 +102,8 @@ User request: ${message}
 Respond clearly in simple language.`;
 
     // 🤖 GEMINI CALL
-   const geminiResponse = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+  const geminiResponse = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_KEY}`,
   {
     method: "POST",
     headers: {
@@ -112,17 +112,12 @@ Respond clearly in simple language.`;
     body: JSON.stringify({
       contents: [
         {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
+          parts: [{ text: prompt }]
         }
       ]
     })
   }
 );
-
     const data = await geminiResponse.json();
 
     console.log("🧠 Gemini RAW:", JSON.stringify(data, null, 2));
