@@ -5,7 +5,6 @@ export default async function handler(req, res) {
   // 🌐 CORS
   const allowedOrigins = [
     "https://chamber-frontend-i2lc.vercel.app",
-    "https://chamber-frontend.vercel.app",
     "http://localhost:3000"
   ];
 
@@ -42,13 +41,13 @@ export default async function handler(req, res) {
     }
 
     // 🔐 ENV VARIABLES
-    const GEMINI_KEY = process.env.GEMINI_API_KEY;
+    const GROQ_KEY = process.env.GROQ_API_KEY;
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-    if (!GEMINI_KEY) {
+    if (!GROQ_KEY) {
       return res.status(500).json({
-        response: "Gemini API key missing."
+        response: "Groq API key missing."
       });
     }
 
@@ -63,7 +62,7 @@ export default async function handler(req, res) {
       const safeMessage = encodeURIComponent(message);
 
       const lawRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/laws?select=*&or=(title.ilike.%${safeMessage}%,content.ilike.%${safeMessage}%)&limit=3`,
+        `${SUPABASE_URL}/rest/v1/laws_new?select=*&or=(title.ilike.%${safeMessage}%,content.ilike.%${safeMessage}%)&limit=3`,
         {
           headers: {
             apikey: SUPABASE_KEY,
@@ -85,8 +84,8 @@ Content: ${law.content}
       console.error("⚠️ Supabase fetch error:", err);
     }
 
-    // 🤖 STEP 2: GEMINI PROMPT
-    const prompt = `You are Chamber AI, an Indian legal assistant.
+    // 🤖 STEP 2: GROQ PROMPT & CALL
+    const systemPrompt = `You are Chamber AI, an Indian legal assistant.
 
 If user asks to generate a draft:
 - Format it properly
@@ -97,41 +96,40 @@ Use the following legal context if available:
 
 ${context || "No specific legal data found."}
 
-User request: ${message}
-
 Respond clearly in simple language.`;
 
-    // 🤖 GEMINI CALL
-  const geminiResponse = await fetch(
-  `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_KEY}`,
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: prompt }]
-        }
-      ]
-    })
-  }
-);
-    const data = await geminiResponse.json();
+    const groqResponse = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${GROQ_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message }
+          ],
+          temperature: 0.7
+        })
+      }
+    );
 
-    console.log("🧠 Gemini RAW:", JSON.stringify(data, null, 2));
+    const data = await groqResponse.json();
 
-    // ❌ GEMINI ERROR HANDLING
+    console.log("🧠 Groq RAW:", JSON.stringify(data, null, 2));
+
+    // ❌ GROQ ERROR HANDLING
     if (data.error) {
-      console.error("❌ Gemini API Error:", data.error);
+      console.error("❌ Groq API Error:", data.error);
       return res.status(500).json({
-        response: "Gemini error: " + data.error.message
+        response: "Groq error: " + data.error.message
       });
     }
 
-    const reply =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const reply = data?.choices?.[0]?.message?.content;
 
     // ❌ EMPTY RESPONSE HANDLING
     if (!reply) {
@@ -152,3 +150,4 @@ Respond clearly in simple language.`;
     });
   }
 }
+
