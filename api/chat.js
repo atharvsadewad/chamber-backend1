@@ -1,153 +1,123 @@
-// ✅ Chamber AI Backend — PRODUCTION READY (FIXED)
+// ============================================================
+// Chamber AI
+// Main API Endpoint
+// ============================================================
+
+import { parseQuery } from "../services/parser.js";
+import { retrieve } from "../services/retriever.js";
+import { generateResponse } from "../services/responder.js";
+
+// ============================================================
+// CORS
+// ============================================================
+
+const allowedOrigins = [
+    "https://chamber-frontend-i2lc.vercel.app",
+    "http://localhost:3000"
+];
+
+// ============================================================
+// API Handler
+// ============================================================
 
 export default async function handler(req, res) {
 
-  // 🌐 CORS
-  const allowedOrigins = [
-    "https://chamber-frontend-i2lc.vercel.app",
-    "http://localhost:3000"
-  ];
+    const origin = req.headers.origin;
 
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Only POST requests allowed" });
-  }
-
-  try {
-    // 🔐 SAFE BODY PARSE
-    let body = req.body;
-
-    if (typeof body === "string") {
-      body = JSON.parse(body);
+    if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
     }
 
-    const message = body?.message;
-
-    if (!message) {
-      return res.status(400).json({
-        response: "Message is required"
-      });
-    }
-
-    // 🔐 ENV VARIABLES
-    const GROQ_KEY = process.env.GROQ_API_KEY;
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_KEY = process.env.SUPABASE_KEY;
-
-    if (!GROQ_KEY) {
-      return res.status(500).json({
-        response: "Groq API key missing."
-      });
-    }
-
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      console.error("❌ Supabase env missing");
-    }
-
-    // 🔍 STEP 1: FETCH CONTEXT FROM SUPABASE
-    let context = "";
-
-    try {
-      const safeMessage = encodeURIComponent(message);
-
-      const lawRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/laws_new?select=*&or=(title.ilike.%${safeMessage}%,content.ilike.%${safeMessage}%)&limit=3`,
-        {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`
-          }
-        }
-      );
-
-      const lawData = await lawRes.json();
-
-      if (Array.isArray(lawData) && lawData.length > 0) {
-        context = lawData.map(law => `
-Title: ${law.title}
-Content: ${law.content}
-`).join("\n\n");
-      }
-
-    } catch (err) {
-      console.error("⚠️ Supabase fetch error:", err);
-    }
-
-    // 🤖 STEP 2: GROQ PROMPT & CALL
-    const systemPrompt = `You are Chamber AI, an Indian legal assistant.
-
-If user asks to generate a draft:
-- Format it properly
-- Use formal legal language
-- Structure it clearly
-
-Use the following legal context if available:
-
-${context || "No specific legal data found."}
-
-Respond clearly in simple language.`;
-
-    const groqResponse = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${GROQ_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: message }
-          ],
-          temperature: 0.7
-        })
-      }
+    res.setHeader(
+        "Access-Control-Allow-Methods",
+        "POST, OPTIONS"
     );
 
-    const data = await groqResponse.json();
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
-    console.log("🧠 Groq RAW:", JSON.stringify(data, null, 2));
-
-    // ❌ GROQ ERROR HANDLING
-    if (data.error) {
-      console.error("❌ Groq API Error:", data.error);
-      return res.status(500).json({
-        response: "Groq error: " + data.error.message
-      });
+    if (req.method === "OPTIONS") {
+        return res.status(200).end();
     }
 
-    const reply = data?.choices?.[0]?.message?.content;
-
-    // ❌ EMPTY RESPONSE HANDLING
-    if (!reply) {
-      return res.status(500).json({
-        response: "AI could not generate response. Try again."
-      });
+    if (req.method !== "POST") {
+        return res.status(405).json({
+            response: "Only POST requests allowed."
+        });
     }
 
-    // ✅ SUCCESS RESPONSE (VERY IMPORTANT)
-    return res.status(200).json({
-      response: reply
-    });
+    try {
 
-  } catch (error) {
-    console.error("💥 Backend Crash:", error);
-    return res.status(500).json({
-      response: "Internal server error"
-    });
-  }
+        // ==========================================
+        // Parse Request Body
+        // ==========================================
+
+        let body = req.body;
+
+        if (typeof body === "string") {
+            body = JSON.parse(body);
+        }
+
+        const message = body?.message?.trim();
+
+        if (!message) {
+
+            return res.status(400).json({
+                response: "Message is required."
+            });
+
+        }
+
+        // ==========================================
+        // Parse User Query
+        // ==========================================
+
+        const parsed = parseQuery(message);
+
+        console.log("📥 Parsed Query:", parsed);
+
+        // ==========================================
+        // Retrieve Database Context
+        // ==========================================
+
+        const records = await retrieve(parsed);
+
+        console.log(`📚 Records Found: ${records.length}`);
+
+        // ==========================================
+        // Generate Final Response
+        // ==========================================
+
+        const reply = await generateResponse(
+            parsed,
+            records
+        );
+
+        // ==========================================
+        // Success
+        // ==========================================
+
+        return res.status(200).json({
+            response: reply
+        });
+
+    }
+
+    catch (err) {
+
+        console.error("❌ Chamber Error");
+
+        console.error(err);
+
+        return res.status(500).json({
+
+            response:
+                "Something went wrong while processing your request."
+
+        });
+
+    }
+
 }
-
